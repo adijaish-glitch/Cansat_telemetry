@@ -109,7 +109,7 @@ const Features = () => {
           
           {/* Embedded Standalone HTML Tracker */}
           <iframe 
-            src="/cansat-3d.html" 
+            src={`${import.meta.env.BASE_URL}cansat-3d.html`} 
             title="Interactive CanSat 3D Schematic"
             className="w-full h-full border-none pointer-events-auto filter saturate-150 contrast-125"
           />
