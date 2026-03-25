@@ -62,7 +62,7 @@ const Navbar = () => {
 
       {/* RIGHT TELEMETRY */}
       <div className="absolute top-24 right-6 text-right flex flex-col gap-2">
-        <span className="text-gray-300">COORDS</span>
+        <span className="text-gray-300">COORDINATES</span>
         <span className="text-gray-600">X: {pad(coords.x)} Y: {pad(coords.y)}</span>
       </div>
 
