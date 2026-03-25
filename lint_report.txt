@@ -1,0 +1,21 @@
+
+C:\Users\Hp\.gemini\antigravity\scratch\futuristic-ui-template\src\components\About.jsx
+  2:10  error  'motion' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\Users\Hp\.gemini\antigravity\scratch\futuristic-ui-template\src\components\CTA.jsx
+  2:10  error  'motion' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\Users\Hp\.gemini\antigravity\scratch\futuristic-ui-template\src\components\Features.jsx
+  2:10  error  'motion' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\Users\Hp\.gemini\antigravity\scratch\futuristic-ui-template\src\components\Hero.jsx
+  2:10  error  'motion' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\Users\Hp\.gemini\antigravity\scratch\futuristic-ui-template\src\components\Navbar.jsx
+  2:10  error  'motion' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\Users\Hp\.gemini\antigravity\scratch\futuristic-ui-template\src\components\Testimonials.jsx
+  2:10  error  'motion' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+✖ 6 problems (6 errors, 0 warnings)
+

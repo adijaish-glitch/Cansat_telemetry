@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CanSat 3D Satellite</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#000008; overflow:hidden; }
+canvas { display:block; }
+#hud-top {
+  position:fixed; top:0; left:0; right:0;
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 18px;
+  background:rgba(0,4,20,0.75);
+  font:12px 'Courier New',monospace; color:#6ab4ff;
+  letter-spacing:1.5px; border-bottom:1px solid rgba(80,150,255,0.18);
+}
+#hud-bot {
+  position:fixed; bottom:0; left:0; right:0;
+  display:flex; justify-content:center; gap:28px;
+  padding:10px;
+  background:rgba(0,4,20,0.75);
+  font:11px 'Courier New',monospace; color:#5aa0dd;
+  border-top:1px solid rgba(80,150,255,0.15);
+  pointer-events:none;
+}
+#legend {
+  position:fixed; left:14px; top:52px;
+  display:flex; flex-direction:column; gap:7px;
+  font:10px 'Courier New',monospace;
+  pointer-events:none;
+}
+.leg { display:flex; align-items:center; gap:7px; color:#bbd0ee; }
+.leg-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; border:1px solid rgba(255,255,255,0.3);}
+</style>
+</head>
+<body>
+<div id="hud-top">
+  <span>◈ CANSAT · SATELLITE STRUCTURE</span>
+  <span id="rot-disp">ROT: 0°</span>
+</div>
+<div id="legend">
+  <div class="leg"><div class="leg-dot" style="background:#1db954"></div>MCU Board (CanSat-SB-V1)</div>
+  <div class="leg"><div class="leg-dot" style="background:#2277dd"></div>SensorOOS Daughter Board</div>
+  <div class="leg"><div class="leg-dot" style="background:#ddaa00"></div>Battery — LiPo 3.7V</div>
+  <div class="leg"><div class="leg-dot" style="background:#228833"></div>SD Card Datalogger</div>
+  <div class="leg"><div class="leg-dot" style="background:#aabbcc"></div>Frame / Antenna</div>
+</div>
+<div id="hud-bot">
+  <span>⟳ DRAG — Rotate</span>
+  <span>⊕ SCROLL — Zoom</span>
+  <span>⊡ All components visible</span>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ── RENDERER ──────────────────────────────────────────────────────
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x00000a);
+scene.fog = new THREE.Fog(0x000010, 12, 40);
+
+const camera = new THREE.PerspectiveCamera(44, innerWidth / innerHeight, 0.01, 100);
+camera.position.set(0, 0.6, 4.8);
+camera.lookAt(0, 0, 0);
+
+// ── LIGHTS ────────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x223355, 1.6));
+
+const sun = new THREE.DirectionalLight(0xffffff, 2.4);
+sun.position.set(5, 8, 6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 25;
+sun.shadow.camera.left = sun.shadow.camera.bottom = -3;
+sun.shadow.camera.right = sun.shadow.camera.top = 3;
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0x3366aa, 0.8);
+fill.position.set(-5, 1, -4);
+scene.add(fill);
+
+const rim = new THREE.DirectionalLight(0x0088ff, 0.45);
+rim.position.set(0, -6, -3);
+scene.add(rim);
+
+// ── STARFIELD ─────────────────────────────────────────────────────
+(function(){
+  const geo = new THREE.BufferGeometry();
+  const pos = [];
+  for (let i = 0; i < 1400; i++) {
+    const r = 25 + Math.random() * 60;
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    pos.push(
+      r * Math.sin(phi) * Math.cos(theta),
+      r * Math.cos(phi),
+      r * Math.sin(phi) * Math.sin(theta)
+    );
+  }
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(geo,
+    new THREE.PointsMaterial({ color: 0xaaccff, size: 0.06, transparent: true, opacity: 0.85 })
+  ));
+})();
+
+// ── MATERIAL LIBRARY ──────────────────────────────────────────────
+function mat(color, rough, metal, opts) {
+  return new THREE.MeshStandardMaterial(Object.assign({ color, roughness: rough, metalness: metal }, opts||{}));
+}
+const M = {
+  strutAl:   mat(0x6e7d90, 0.22, 0.90),
+  topPlate:  mat(0x58687a, 0.28, 0.88),
+  panelGlass:mat(0x2244aa, 0.08, 0.15, { transparent:true, opacity:0.09, side:THREE.DoubleSide }),
+  pcbGreen:  mat(0x0c5c2a, 0.50, 0.18),
+  pcbBlue:   mat(0x082850, 0.50, 0.18),
+  pcbDkGrn:  mat(0x0a3810, 0.52, 0.15),
+  chipBlk:   mat(0x0d0d14, 0.38, 0.70),
+  chipDk:    mat(0x1a1030, 0.42, 0.65),
+  copper:    mat(0xc87030, 0.38, 0.92),
+  gold:      mat(0xcca020, 0.28, 0.88),
+  silver:    mat(0xb0bac8, 0.20, 0.95),
+  aluminum:  mat(0x8090a8, 0.22, 0.88),
+  shieldMet: mat(0x8899aa, 0.18, 0.94, { transparent:true, opacity:0.60, side:THREE.DoubleSide }),
+  gpsGold:   mat(0xd4b000, 0.32, 0.55),
+  lipoYel:   mat(0xc89000, 0.60, 0.22),
+  lipoBlk:   mat(0x0e0e0a, 0.75, 0.10),
+  white:     mat(0xeeeeff, 0.32, 0.05),
+  black:     mat(0x080810, 0.55, 0.40),
+  capBlue:   mat(0x0a3080, 0.55, 0.28),
+  capBlk:    mat(0x080810, 0.60, 0.35),
+  redW:      mat(0xcc1100, 0.85, 0.05),
+  blueW:     mat(0x1133cc, 0.85, 0.05),
+  grnW:      mat(0x116611, 0.85, 0.05),
+  grayW:     mat(0x667788, 0.85, 0.05),
+  yelW:      mat(0xddaa00, 0.85, 0.05),
+  brown:     mat(0x996644, 0.82, 0.05),
+  ledGreen:  mat(0x00ff44, 0.30, 0.10, { emissive: new THREE.Color(0x00cc33), emissiveIntensity:0.9 }),
+  ledRed:    mat(0xff2200, 0.30, 0.10, { emissive: new THREE.Color(0xdd1100), emissiveIntensity:0.9 }),
+};
+
+// ── GEOMETRY HELPERS ──────────────────────────────────────────────
+function box(w, h, d, m) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  return mesh;
+}
+function cyl(rt, rb, h, seg, m) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), m);
+  mesh.castShadow = true;
+  return mesh;
+}
+function sph(r, seg, m) {
+  return new THREE.Mesh(new THREE.SphereGeometry(r, seg, seg), m);
+}
+function tube(pts, r, m) {
+  const curve = new THREE.CatmullRomCurve3(pts);
+  return new THREE.Mesh(new THREE.TubeGeometry(curve, 20, r, 7, false), m);
+}
+
+// ── PCB BASE with traces ───────────────────────────────────────────
+function makePCB(m, W, D) {
+  const g = new THREE.Group();
+  const base = box(W, 0.022, D, m);
+  g.add(base);
+  // copper traces
+  for (let i = 0; i < 12; i++) {
+    const isH = Math.random() > 0.5;
+    const len = Math.random() * W * 0.55 + 0.04;
+    const tr = box(isH ? len : 0.006, 0.003, isH ? 0.006 : len, M.copper);
+    tr.position.set((Math.random()-0.5)*W*0.72, 0.013, (Math.random()-0.5)*D*0.72);
+    g.add(tr);
+  }
+  // mounting holes (silver cylinders at corners)
+  [[W/2-0.05, D/2-0.05],[-(W/2-0.05), D/2-0.05],
+   [W/2-0.05, -(D/2-0.05)],[-(W/2-0.05), -(D/2-0.05)]].forEach(([x,z])=>{
+    const h = cyl(0.016, 0.016, 0.025, 8, M.silver);
+    h.position.set(x, 0, z);
+    g.add(h);
+  });
+  return g;
+}
+
+// ── CHIP (IC package with legs) ────────────────────────────────────
+function addChip(parent, x, y, z, cw, cd, chipMat) {
+  const chip = box(cw, 0.018, cd, chipMat || M.chipBlk);
+  chip.position.set(x, y, z);
+  parent.add(chip);
+  // legs on all 4 sides
+  const legCount = 4;
+  const legMat = M.silver;
+  [[-1,0],[1,0],[0,-1],[0,1]].forEach(([sx,sz]) => {
+    for (let i = 0; i < legCount; i++) {
+      const leg = box(0.006, 0.010, 0.003, legMat);
+      const off = (i - (legCount-1)/2) * 0.022;
+      leg.position.set(
+        x + sx*(cw/2 + 0.005) + sz*off,
+        y - 0.004,
+        z + sz*(cd/2 + 0.005) + sx*off
+      );
+      parent.add(leg);
+    }
+  });
+}
+
+// ── CAPACITOR ──────────────────────────────────────────────────────
+function addCap(parent, x, y, z, r, h, m) {
+  const c = cyl(r, r, h, 10, m);
+  c.position.set(x, y + h/2, z);
+  parent.add(c);
+  const stripe = cyl(r+0.001, r+0.001, h*0.12, 10, M.silver);
+  stripe.position.set(x, y + h*0.92, z);
+  parent.add(stripe);
+}
+
+// ── RESISTOR ──────────────────────────────────────────────────────
+function addRes(parent, x, y, z, rotY) {
+  const g = new THREE.Group();
+  const body = box(0.026, 0.010, 0.013, M.brown);
+  g.add(body);
+  [-0.014, 0.014].forEach(ox => {
+    const end = box(0.004, 0.012, 0.014, M.silver);
+    end.position.x = ox;
+    g.add(end);
+  });
+  g.position.set(x, y, z);
+  g.rotation.y = rotY || 0;
+  parent.add(g);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  BUILD THE SATELLITE
+// ══════════════════════════════════════════════════════════════════
+const root = new THREE.Group();
+scene.add(root);
+
+const FW = 0.96;   // frame width/depth
+const FH = 1.75;   // total frame height
+
+// ── FRAME: 4 corner struts ─────────────────────────────────────────
+[[-1,-1],[1,-1],[1,1],[-1,1]].forEach(([sx,sz]) => {
+  const strut = cyl(0.016, 0.016, FH, 10, M.strutAl);
+  strut.position.set(sx*FW/2, 0, sz*FW/2);
+  root.add(strut);
+  // ring clamps at 3 heights
+  [-0.5, 0.05, 0.62].forEach(ky => {
+    const ring = cyl(0.026, 0.026, 0.022, 10, M.aluminum);
+    ring.position.set(sx*FW/2, ky, sz*FW/2);
+    root.add(ring);
+  });
+});
+
+// ── FRAME: horizontal cross rails ─────────────────────────────────
+[-0.50, 0.05, 0.62].forEach(ky => {
+  const rX = box(FW - 0.04, 0.013, 0.013, M.strutAl);
+  rX.position.y = ky; root.add(rX);
+  const rZ = box(0.013, 0.013, FW - 0.04, M.strutAl);
+  rZ.position.y = ky; root.add(rZ);
+});
+
+// ── FRAME: top & bottom plates ────────────────────────────────────
+[FH/2, -FH/2].forEach(y => {
+  const plate = box(FW+0.04, 0.022, FW+0.04, M.topPlate);
+  plate.position.y = y;
+  root.add(plate);
+});
+
+// ── FRAME: transparent side panels ────────────────────────────────
+[[FW/2, 0, 0], [-FW/2, 0, 0], [0, 0, FW/2], [0, 0, -FW/2]].forEach(([px,py,pz]) => {
+  const isX = px !== 0;
+  const panel = box(isX ? 0.007 : FW-0.04, FH-0.04, isX ? FW-0.04 : 0.007, M.panelGlass);
+  panel.position.set(px, py, pz);
+  root.add(panel);
+});
+
+// ════════════════════════════════
+//  BOARD 1 — MCU  (y = +0.55)
+// ════════════════════════════════
+const mcuGroup = makePCB(M.pcbGreen, FW*0.87, FW*0.87);
+mcuGroup.position.y = 0.55;
+root.add(mcuGroup);
+
+// Main ARM MCU chip
+addChip(mcuGroup, -0.05, 0.020, 0.05, 0.19, 0.19, M.chipBlk);
+// Marking on chip top
+const mcuMark = box(0.18, 0.002, 0.005, mat(0x224422, 0.8, 0.0));
+mcuMark.position.set(-0.05, 0.030, 0.05);
+mcuGroup.add(mcuMark);
+
+// Radio module + EMI shield
+const radioBase = box(0.21, 0.010, 0.13, mat(0x061206,0.5,0.2));
+radioBase.position.set(0.22, 0.016, -0.10);
+mcuGroup.add(radioBase);
+addChip(mcuGroup, 0.22, 0.022, -0.10, 0.09, 0.07, M.chipDk);
+const shield = box(0.22, 0.026, 0.14, M.shieldMet);
+shield.position.set(0.22, 0.025, -0.10);
+mcuGroup.add(shield);
+
+// Capacitors
+[[0.30,0,0.12],[0.32,0,0.20],[0.22,0,0.22],[-.28,0,0.20],[-.29,0,-.10],[0.10,0,-.30]].forEach(([x,,z]) =>
+  addCap(mcuGroup, x, 0.011, z, 0.016, 0.052, M.capBlue)
+);
+// Resistors
+[[-0.18,0.011,0.28,0],[0.0,0.011,-.28,Math.PI/2],[0.28,0.011,0.26,0]].forEach(a => addRes(mcuGroup,...a));
+
+// Crystal oscillator
+const xtal = box(0.032,0.016,0.014, M.silver);
+xtal.position.set(-0.22, 0.020, -0.22); mcuGroup.add(xtal);
+
+// USB-C port
+const usb = box(0.075, 0.026, 0.042, M.aluminum);
+usb.position.set(-0.36, 0.022, 0.32); mcuGroup.add(usb);
+const usbPort = box(0.060, 0.018, 0.022, M.black);
+usbPort.position.set(-0.36, 0.022, 0.33); mcuGroup.add(usbPort);
+
+// Tactile button
+const btn = cyl(0.017, 0.017, 0.016, 8, M.black);
+btn.position.set(0.12, 0.020, -0.32); mcuGroup.add(btn);
+const btnCap = cyl(0.013, 0.013, 0.008, 8, mat(0x444444,0.6,0.3));
+btnCap.position.set(0.12, 0.029, -0.32); mcuGroup.add(btnCap);
+
+// LED indicator
+const led1 = cyl(0.008, 0.008, 0.012, 8, M.ledGreen);
+led1.position.set(0.18, 0.022, -0.30); mcuGroup.add(led1);
+
+// Pin connector header (2x5)
+const hdr1 = box(0.13, 0.015, 0.025, M.black);
+hdr1.position.set(0.10, 0.018, -0.38); mcuGroup.add(hdr1);
+for (let p = 0; p < 5; p++) {
+  const pin = cyl(0.003, 0.003, 0.028, 4, M.gold);
+  pin.position.set(0.06 + p*0.023, 0.026, -0.38);
+  mcuGroup.add(pin);
+}
+
+// ── Ribbon cable MCU → Sensor ─────────────────────────────────────
+[0,1,2,3].forEach(i => {
+  const off = (i-1.5)*0.016;
+  const t = tube([
+    new THREE.Vector3(off, 0.562, 0.30),
+    new THREE.Vector3(off+0.03, 0.46, 0.34),
+    new THREE.Vector3(off, 0.36, 0.31),
+    new THREE.Vector3(off, 0.27, 0.28),
+  ], 0.005, mat(0xccaa00, 0.9, 0.0));
+  root.add(t);
+});
+
+// ════════════════════════════════
+//  BOARD 2 — SENSOROOS  (y=+0.17)
+// ════════════════════════════════
+const senGroup = makePCB(M.pcbBlue, FW*0.87, FW*0.87);
+senGroup.position.y = 0.17;
+root.add(senGroup);
+
+// GPS patch antenna
+const gpsBase2 = box(0.16, 0.008, 0.16, M.aluminum);
+gpsBase2.position.set(-0.23, 0.015, -0.21); senGroup.add(gpsBase2);
+const gpsPatch = box(0.148, 0.010, 0.148, M.gpsGold);
+gpsPatch.position.set(-0.23, 0.021, -0.21); senGroup.add(gpsPatch);
+// GPS crosshair lines
+const gHx = box(0.13, 0.002, 0.004, mat(0x886600,0.8,0.5));
+gHx.position.set(-0.23, 0.027, -0.21); senGroup.add(gHx);
+const gVx = box(0.004, 0.002, 0.13, mat(0x886600,0.8,0.5));
+gVx.position.set(-0.23, 0.027, -0.21); senGroup.add(gVx);
+
+// BME280 pressure/temp sensor
+addChip(senGroup, 0.10, 0.018, 0.19, 0.065, 0.065, M.chipBlk);
+// MPU6050 IMU
+addChip(senGroup, 0.25, 0.018, -0.05, 0.082, 0.082, M.chipBlk);
+// Magnetometer
+addChip(senGroup, 0.25, 0.018, 0.16, 0.052, 0.052, mat(0x1a0a22,0.4,0.7));
+// LoRa module
+const loraBase = box(0.19, 0.010, 0.13, mat(0x040e20,0.5,0.2));
+loraBase.position.set(-0.10, 0.016, 0.27); senGroup.add(loraBase);
+addChip(senGroup, -0.10, 0.023, 0.27, 0.10, 0.08, M.chipDk);
+// SMA connector
+const sma = cyl(0.022, 0.022, 0.032, 8, M.gold);
+sma.rotation.z = Math.PI/2;
+sma.position.set(-0.19, 0.026, 0.37); senGroup.add(sma);
+
+// Capacitors
+[[-0.35,0,0],[0.0,0,-.32],[0.33,0,-.18],[0.33,0,0.20]].forEach(([x,,z]) =>
+  addCap(senGroup, x, 0.011, z, 0.018, 0.055, M.capBlue)
+);
+// Resistors
+[[-0.28,0.011,-0.15,0],[0.18,0.011,-.28,Math.PI/2]].forEach(a => addRes(senGroup,...a));
+
+// Flex connector
+for (let p = 0; p < 8; p++) {
+  const pin = cyl(0.003, 0.003, 0.026, 4, M.gold);
+  pin.position.set(-0.28 + p*0.018, 0.024, -0.38);
+  senGroup.add(pin);
+}
+const hdrS = box(0.16, 0.015, 0.024, M.black);
+hdrS.position.set(-0.21, 0.018, -0.38); senGroup.add(hdrS);
+
+// ── Flex cable Sen → Battery ──────────────────────────────────────
+const flexMat = mat(0xccaa00, 0.88, 0.0, { side: THREE.DoubleSide });
+const flex = box(0.09, 0.003, 0.20, flexMat);
+flex.position.set(0.32, 0.09, 0.05); root.add(flex);
+
+// ════════════════════════════════
+//  BATTERY  (y = -0.175)
+// ════════════════════════════════
+const battGroup = new THREE.Group();
+battGroup.position.y = -0.175;
+root.add(battGroup);
+
+const battBody = box(0.64, 0.072, 0.33, M.lipoYel);
+battGroup.add(battBody);
+
+// Shrink-wrap bands
+for (let i = 0; i < 6; i++) {
+  const band = box(0.006, 0.074, 0.332, mat(0x997700,0.9,0.1));
+  band.position.x = -0.27 + i*0.11;
+  battGroup.add(band);
+}
+// Label sticker
+const sticker = box(0.52, 0.002, 0.26, M.lipoBlk);
+sticker.position.y = 0.037; battGroup.add(sticker);
+// Terminals
+[-0.28, 0.28].forEach(x => {
+  const t = box(0.04, 0.022, 0.042, M.silver);
+  t.position.set(x, 0.047, 0); battGroup.add(t);
+});
+// PCM protection board
+const pcm = box(0.11, 0.018, 0.04, M.chipBlk);
+pcm.position.set(0.32, 0.052, 0); battGroup.add(pcm);
+addChip(battGroup, 0.32, 0.058, 0, 0.07, 0.028, M.chipDk);
+
+// Wires battery → datalogger
+[M.redW,M.blueW,M.grnW,M.grayW,M.yelW].forEach((wm,i) => {
+  const ox = -0.06 + i*0.03;
+  const t = tube([
+    new THREE.Vector3(ox, -0.212, 0.12),
+    new THREE.Vector3(ox+0.02, -0.29, 0.16),
+    new THREE.Vector3(ox, -0.40, 0.18),
+    new THREE.Vector3(ox, -0.50, 0.15),
+  ], 0.006, wm);
+  root.add(t);
+});
+
+// ════════════════════════════════
+//  BOARD 3 — DATALOGGER (y=-0.58)
+// ════════════════════════════════
+const logGroup = makePCB(M.pcbDkGrn, FW*0.87, FW*0.87);
+logGroup.position.y = -0.58;
+root.add(logGroup);
+
+// SD card slots ×2
+[-0.16, 0.10].forEach(x => {
+  const slot = box(0.115, 0.024, 0.090, M.aluminum);
+  slot.position.set(x, 0.023, 0.34); logGroup.add(slot);
+  const card = box(0.100, 0.018, 0.078, M.white);
+  card.position.set(x, 0.022, 0.33); logGroup.add(card);
+  // gold contacts
+  for (let c = 0; c < 9; c++) {
+    const cont = box(0.006, 0.002, 0.022, M.gold);
+    cont.position.set(x - 0.034 + c*0.008, 0.022, 0.335);
+    logGroup.add(cont);
+  }
+});
+
+// Logger MCU
+addChip(logGroup, 0.21, 0.018, -0.10, 0.15, 0.15, M.chipBlk);
+// RTC chip
+addChip(logGroup, -0.26, 0.018, 0.02, 0.065, 0.065, M.chipDk);
+// RTC crystal
+const xtal3 = box(0.034, 0.016, 0.015, M.silver);
+xtal3.position.set(-0.26, 0.020, 0.12); logGroup.add(xtal3);
+
+// Caps
+[[-0.34,0.011,0.14],[-0.35,0.011,-.10],[0.0,0.011,-.32],[0.32,0.011,0.28]].forEach(([x,y,z]) =>
+  addCap(logGroup, x, y, z, 0.018, 0.055, M.capBlk)
+);
+// Resistors
+[[0.10,0.011,-.28,0],[-.10,0.011,-.29,Math.PI/2]].forEach(a => addRes(logGroup,...a));
+
+// USB port
+const usbL = box(0.075, 0.026, 0.042, M.aluminum);
+usbL.position.set(-0.37, 0.022, 0.30); logGroup.add(usbL);
+// Power LED
+const ledR = cyl(0.009, 0.009, 0.014, 8, M.ledRed);
+ledR.position.set(-0.31, 0.023, -0.26); logGroup.add(ledR);
+// Connector
+const hdrL = box(0.14, 0.016, 0.024, M.black);
+hdrL.position.set(0.10, 0.018, -0.39); logGroup.add(hdrL);
+for (let p = 0; p < 6; p++) {
+  const pin = cyl(0.003, 0.003, 0.028, 4, M.gold);
+  pin.position.set(0.055 + p*0.022, 0.026, -0.39);
+  logGroup.add(pin);
+}
+
+// ════════════════════════════════
+//  ANTENNA (no solar panels!)
+// ════════════════════════════════
+// Whip antenna mount base
+const antMnt = cyl(0.030, 0.030, 0.042, 10, M.gold);
+antMnt.position.set(0.12, FH/2+0.021, 0.10); root.add(antMnt);
+// Coil
+for (let i = 0; i < 10; i++) {
+  const seg = cyl(0.010, 0.010, 0.010, 6, M.silver);
+  const a = (i/10)*Math.PI*2;
+  seg.position.set(0.12+Math.cos(a)*0.020, FH/2+0.05+i*0.014, 0.10+Math.sin(a)*0.020);
+  root.add(seg);
+}
+// Main whip
+const whip = cyl(0.006, 0.003, 0.55, 8, M.aluminum);
+whip.position.set(0.12, FH/2+0.05+0.275, 0.10); root.add(whip);
+
+// Stub side antenna
+const stubMnt = cyl(0.018, 0.018, 0.028, 8, M.gold);
+stubMnt.rotation.z = Math.PI/2;
+stubMnt.position.set(FW/2+0.012, 0.44, -0.08); root.add(stubMnt);
+const stub = cyl(0.005, 0.003, 0.24, 8, M.aluminum);
+stub.rotation.z = Math.PI/2;
+stub.position.set(FW/2+0.14, 0.44, -0.08); root.add(stub);
+
+// GPS dome antenna (top)
+const gpsDome = new THREE.Mesh(
+  new THREE.SphereGeometry(0.042, 14, 8, 0, Math.PI*2, 0, Math.PI/2),
+  M.gpsGold
+);
+gpsDome.position.set(-0.22, FH/2+0.023, 0.10); root.add(gpsDome);
+const gpsMnt2 = cyl(0.028, 0.028, 0.024, 10, M.aluminum);
+gpsMnt2.position.set(-0.22, FH/2+0.011, 0.10); root.add(gpsMnt2);
+
+// ════════════════════════════════
+//  ORBIT RING + MOVING DOT
+// ════════════════════════════════
+(function(){
+  const pts=[];
+  for(let i=0;i<=80;i++){
+    const a=i/80*Math.PI*2;
+    pts.push(new THREE.Vector3(Math.cos(a)*2.2, -1.05+Math.sin(a)*0.14, Math.sin(a)*2.2));
+  }
+  const ring = tube(pts, 0.005, mat(0x1a3a88,0.6,0.2,{transparent:true,opacity:0.28}));
+  scene.add(ring);
+  window._dot = sph(0.05, 10, mat(0x44aaff,0.4,0.3,{emissive:new THREE.Color(0x2266dd),emissiveIntensity:0.6}));
+  scene.add(window._dot);
+})();
+
+// ── ORBIT CONTROLS ────────────────────────────────────────────────
+let drag=false, px=0, py=0, rotY=0.35, rotX=0.16, zoom=4.8;
+const el=renderer.domElement;
+el.addEventListener('mousedown',e=>{drag=true;px=e.clientX;py=e.clientY;});
+el.addEventListener('mouseup',()=>{drag=false;});
+window.addEventListener('mouseup',()=>{drag=false;});
+el.addEventListener('mousemove',e=>{
+  if(!drag)return;
+  rotY+=(e.clientX-px)*0.007; px=e.clientX;
+  rotX+=(e.clientY-py)*0.004; py=e.clientY;
+  rotX=Math.max(-1.15,Math.min(1.15,rotX));
+});
+el.addEventListener('wheel',e=>{
+  zoom=Math.max(2.0,Math.min(8.5,zoom+e.deltaY*0.005));
+},{passive:true});
+el.addEventListener('touchstart',e=>{drag=true;px=e.touches[0].clientX;py=e.touches[0].clientY;});
+el.addEventListener('touchend',()=>{drag=false;});
+el.addEventListener('touchmove',e=>{
+  if(!drag)return;
+  rotY+=(e.touches[0].clientX-px)*0.010;px=e.touches[0].clientX;
+  rotX+=(e.touches[0].clientY-py)*0.006;py=e.touches[0].clientY;
+  rotX=Math.max(-1.15,Math.min(1.15,rotX));
+});
+
+// ── RENDER LOOP ───────────────────────────────────────────────────
+const rotDisp=document.getElementById('rot-disp');
+let t=0;
+function animate(){
+  requestAnimationFrame(animate);
+  t+=0.007;
+  if(!drag) rotY+=0.004;
+  root.rotation.y=rotY;
+  root.rotation.x=rotX;
+  camera.position.set(0, 0.5, zoom);
+  camera.lookAt(0,0.1,0);
+  if(window._dot){
+    const a=t*1.1;
+    window._dot.position.set(Math.cos(a)*2.2,-1.05+Math.sin(a)*0.14,Math.sin(a)*2.2);
+  }
+  rotDisp.textContent='ROT: '+(((rotY*180/Math.PI)%360+360)%360|0)+'°';
+  renderer.render(scene,camera);
+}
+animate();
+
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
