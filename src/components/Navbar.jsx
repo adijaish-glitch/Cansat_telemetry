@@ -41,10 +41,23 @@ const Navbar = () => {
 
         {/* Right Nav Links */}
         <div className="hidden lg:flex gap-8 text-right pointer-events-auto">
-          {['MISSION // PROFILE', 'SENSORS // ARRAY', 'AVIONICS // BRAIN', 'STRUCTURE // AIRFRAME'].map((link, i) => (
-            <a key={i} href={`#${link.split(' ')[0].toLowerCase()}`} className="hover:text-accent transition-colors flex flex-col items-end">
-              <span className="text-gray-300">{link.split(' // ')[0]}</span>
-              <span className="text-gray-600">// {link.split(' // ')[1]}</span>
+          {[
+            { label: 'MISSION // PROFILE', id: 'timeline' },
+            { label: 'SENSORS // ARRAY', id: 'features' },
+            { label: 'AVIONICS // BRAIN', id: 'testimonials' },
+            { label: 'STRUCTURE // AIRFRAME', id: 'about' }
+          ].map((item, i) => (
+            <a 
+              key={i} 
+              href={`#${item.id}`} 
+              onClick={(e) => { 
+                e.preventDefault(); 
+                document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' }); 
+              }} 
+              className="hover:text-accent transition-colors flex flex-col items-end"
+            >
+              <span className="text-gray-300">{item.label.split(' // ')[0]}</span>
+              <span className="text-gray-600">// {item.label.split(' // ')[1]}</span>
             </a>
           ))}
         </div>
