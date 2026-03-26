@@ -31,7 +31,7 @@ const Navbar = () => {
         {/* Left */}
         <div className="flex items-center gap-3 text-gray-300">
           <div className="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_#00f0ff]" />
-          <span>NOVA-1 // FLIGHT SYS</span>
+          <span>ARAMBH // FLIGHT SYS</span>
         </div>
         
         {/* Center */}

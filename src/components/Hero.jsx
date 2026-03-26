@@ -13,7 +13,7 @@ const Hero = () => {
           transition={{ delay: 0.2 }}
           className="text-accent text-sm md:text-md tracking-[0.3em] mb-4 font-bold"
         >
-          {'>'} INITIALIZE_UPLINK // NOVA-1
+          {'>'} INITIALIZE_UPLINK // ARAMBH
         </motion.div>
 
         <motion.h1 
@@ -23,7 +23,7 @@ const Hero = () => {
           className="text-7xl md:text-8xl lg:text-9xl font-bold text-white tracking-widest leading-none mb-4"
           style={{ textShadow: '0 0 20px rgba(0, 240, 255, 0.6), 0 0 40px rgba(0, 240, 255, 0.3)' }}
         >
-          NOVA-1
+          ARAMBH
         </motion.h1>
 
         {/* Horizontal Cyan Intersecting Line */}
