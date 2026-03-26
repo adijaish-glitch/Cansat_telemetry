@@ -11,6 +11,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import Rocket3D from './components/Rocket3D';
 import MovingStars from './components/MovingStars';
+import SatelliteWidget from './components/SatelliteWidget';
 
 function App() {
   return (
@@ -28,6 +29,8 @@ function App() {
         </Canvas>
       </div>
 
+      <SatelliteWidget />
+      
       <Navbar />
       <Hero />
       <Features />
