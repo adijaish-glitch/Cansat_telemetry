@@ -70,7 +70,7 @@ const Navbar = () => {
           <span>AUTH_KEY: VALIDATED</span>
         </div>
         <span>SYS: NOMINAL</span>
-        <span>ALT: <span className="text-accent">0880</span> M</span>
+        <span>ALT: <span className="text-accent">2.8</span> KM</span>
       </div>
 
       {/* RIGHT TELEMETRY */}
@@ -82,7 +82,7 @@ const Navbar = () => {
       {/* BOTTOM BAR */}
       <div className="absolute bottom-0 left-0 w-full p-6 flex justify-between items-end border-t border-white/5 bg-black/40 backdrop-blur-sm">
         <div className="flex flex-col md:flex-row gap-6 md:gap-12">
-          <div><span className="text-accent mr-2">01</span> TARGET_ALT: 1000M</div>
+          <div><span className="text-accent mr-2">01</span> TARGET_ALT: 3.0KM</div>
           <div><span className="text-accent mr-2">02</span> PROPELLANT: KNSB</div>
           <div><span className="text-accent mr-2">03</span> RADIO: 433MHZ LORA</div>
         </div>
